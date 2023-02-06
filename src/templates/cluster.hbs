@@ -1,0 +1,79 @@
+'use strict'
+
+// fastify server with cluster support 
+// run with: node cluster.js
+
+// Require the framework and instantiate it
+const os = require("os");
+const path = require('path');
+const cluster = require("cluster");
+const opts = {
+    logger: false,
+    disableRequestLogging: true
+};
+const fastify = require('fastify')(opts);
+const AutoLoad = require('@fastify/autoload');
+{{#each imports}}
+{{this}}
+{{/each}}
+
+const clusterWorkerSize = (process.env.CLUSTER)?process.env.CLUSTER:os.cpus().length;
+
+// Declare routes
+{{routes}}
+/*fastify.get('/', async (request, reply) => {
+    return { hello: 'world' };
+})*/
+
+!(async()=>{
+    // Place here your custom code!
+    {{code}}
+
+    // This loads all plugins defined in plugins
+    // those should be support plugins that are reused
+    // through your application
+    fastify.register(AutoLoad, {
+        dir: path.join(__dirname, 'plugins'),
+        options: Object.assign({}, opts)
+    })
+
+    // This loads all plugins defined in routes
+    // define your routes in one of these
+    fastify.register(AutoLoad, {
+        dir: path.join(__dirname, 'routes'),
+        options: Object.assign({}, opts)
+    })
+})()
+
+// Run the server!
+const start = async () => {
+    try {
+        await fastify.listen(process.env.PORT);
+        console.log(`server listening on ${fastify.server.address().port} and worker ${process.pid}`);
+    } catch (err) {
+        fastify.log.error(err);
+        process.exit(1);
+    }
+}
+
+if (clusterWorkerSize > 1) {
+    if (cluster.isMaster) {
+        for (let i=0; i < clusterWorkerSize; i++) {
+            cluster.fork();
+        }
+
+        cluster.on("exit", function(worker) {
+            console.log("Worker", worker.id, "has exited with signal", signal);
+            if (code !== 0 && !worker.exitedAfterDisconnect) {
+                // restart failed worker
+                cluster.fork();
+            }
+        })
+    } else {
+        start();
+    }
+} else {
+    start();
+}
+
+
